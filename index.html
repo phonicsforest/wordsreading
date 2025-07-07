@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Word Practice</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: sans-serif;
+      background: url('palace.png') no-repeat center center fixed;
+      background-size: cover;
+    }
+
+    .top-buttons {
+      position: absolute;
+      top: 10px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      z-index: 5;
+    }
+
+    .top-buttons button {
+      font-size: 16px;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+
+    .image-container {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100vw;
+      height: calc(100vh - 70px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #drawImage {
+      width: auto;
+      height: 90%;
+      object-fit: contain;
+      position: relative;
+      z-index: 0;
+    }
+
+    #instruction, #word, #progressContainer {
+      z-index: 1;
+    }
+
+    #instruction {
+      position: absolute;
+      top: 12%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 25px;
+      color: black;
+      text-shadow: 1px 1px 6px white;
+    }
+
+    #word {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 10vw;
+      font-weight: bold;
+      color: black;
+      text-shadow: 2px 2px 8px white;
+    }
+
+    #feedbackIcon {
+      position: absolute;
+      bottom: 15%;
+      right: 35%;
+      font-size: 120px;
+      color: red;
+      z-index: 3;
+      pointer-events: none;
+      display: none;
+    }
+
+    #progressContainer {
+      position: absolute;
+      top: 63%;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+    }
+
+    .progress-box {
+      width: 30px;
+      height: 6px;
+      border: 2px solid orange;
+      background-color: white;
+      border-radius: 3px;
+      transition: background-color 0.3s;
+    }
+
+    .progress-box.filled {
+      background-color: orange;
+    }
+
+    #resultContainer {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      z-index: 3;
+      display: none;
+      height: 80%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    #resultTitle {
+      font-size: 40px;
+      transform: translateY(-30px);
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    #resultTable {
+      display: flex;
+      justify-content: center;
+      font-size: 30px;
+      gap: 60px;
+      margin-bottom: 20px;
+    }
+
+    .result-column {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .result-icon {
+      font-size: 24px;
+      color: darkred;
+    }
+
+    #resultMessage {
+      font-size: 36px;
+      font-weight: bold;
+      color: darkred;
+      transform: rotate(-20deg);
+      align-self: flex-end;
+      margin-left: 300px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="top-buttons" id="topButtons">
+  <button id="startButton" onclick="startRecognition()">Start Speaking</button>
+</div>
+
+<div class="image-container">
+  <img id="drawImage" src="draw.png" alt="Board">
+  <div id="instruction">Read the word:</div>
+  <div id="word">mesh</div>
+  <div id="progressContainer"></div>
+  <div id="feedbackIcon"></div>
+
+  <div id="resultContainer">
+    <div id="resultTitle">Result</div>
+    <div id="resultTable">
+      <div class="result-column" id="col1"></div>
+      <div class="result-column" id="col2"></div>
+    </div>
+    <div id="resultMessage"></div>
+  </div>
+</div>
+
+<script>
+const wordList = ["mesh", "chip", "moth", "shin", "with", "bee", "cash", "top", "read", "meet", "joy", "coil"];
+const wordVariants = {
+  "mesh": ["mesh", "mash", "mush", "mech"],
+  "chip": ["chip", "cheap", "chap"],
+  "moth": ["moth", "mouth", "moss"],
+  "shin": ["shin", "sheen", "sin"],
+  "with": ["with", "width", "whiff"],
+  "bee": ["bee"],
+  "cash": ["cash"],
+  "top": ["top"],
+  "read": ["read", "red"],
+  "meet": ["meet", "meat"],
+  "joy": ["joy"],
+  "coil": ["coil"]
+};
+
+let currentIndex = 0;
+let recognition;
+let wordStatus = {}; // key: word, value: { correct: bool, skipped: bool }
+
+function renderProgress() {
+  const container = document.getElementById("progressContainer");
+  container.innerHTML = "";
+  for (let i = 0; i < wordList.length; i++) {
+    const box = document.createElement("div");
+    box.className = "progress-box" + (i < currentIndex ? " filled" : "");
+    container.appendChild(box);
+  }
+}
+
+function updateWord() {
+  document.getElementById("word").textContent = wordList[currentIndex];
+  renderProgress();
+}
+
+function showFeedback(icon, color) {
+  const el = document.getElementById("feedbackIcon");
+  el.textContent = icon;
+  el.style.color = color;
+  el.style.display = "block";
+}
+
+function initRecognition() {
+  recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.continuous = false;
+
+  recognition.onresult = function(event) {
+    const spoken = event.results[0][0].transcript.trim().toLowerCase();
+    const word = wordList[currentIndex];
+    const variants = wordVariants[word] || [word];
+    const matched = variants.some(v => spoken.includes(v));
+
+    if (matched) {
+      showFeedback("✓", "red");
+
+      // 使用新 Audio 物件以完整播放聲音
+      const clickSound = new Audio("click_extended.mp3");
+      clickSound.play();
+
+      if (!wordStatus[word]) wordStatus[word] = {};
+      wordStatus[word].correct = true;
+
+      setTimeout(() => {
+        document.getElementById("feedbackIcon").style.display = "none";
+        currentIndex++;
+        if (currentIndex < wordList.length) {
+          updateWord();
+          recognition.start();
+        } else {
+          recognition.stop();
+          document.getElementById("skipButton")?.remove();
+          showResult();
+        }
+      }, 1000);
+    } else {
+      showFeedback("✗", "red");
+      setTimeout(() => {
+        document.getElementById("feedbackIcon").style.display = "none";
+        recognition.start();
+      }, 1000);
+    }
+  };
+
+  recognition.onerror = () => recognition.stop();
+  recognition.onend = () => {
+    if (currentIndex < wordList.length) recognition.start();
+  };
+}
+
+function startRecognition() {
+  if (!recognition) initRecognition();
+  currentIndex = 0;
+  wordStatus = {};
+  document.getElementById("instruction").style.display = "block";
+  document.getElementById("word").style.display = "block";
+  document.getElementById("progressContainer").style.display = "flex";
+  document.getElementById("resultContainer").style.display = "none";
+
+  document.getElementById("startButton").remove();
+
+  const skipBtn = document.createElement("button");
+  skipBtn.id = "skipButton";
+  skipBtn.textContent = "Skip";
+  skipBtn.onclick = skipWord;
+  document.getElementById("topButtons").appendChild(skipBtn);
+
+  updateWord();
+  recognition.start();
+}
+
+function skipWord() {
+  const word = wordList[currentIndex];
+  if (!wordStatus[word]) wordStatus[word] = {};
+  wordStatus[word].skipped = true;
+
+  currentIndex++;
+  if (currentIndex < wordList.length) {
+    updateWord();
+    recognition.start();
+  } else {
+    recognition.stop();
+    document.getElementById("skipButton").remove();
+    showResult();
+  }
+}
+
+function showResult() {
+  document.getElementById("instruction").style.display = "none";
+  document.getElementById("word").style.display = "none";
+  document.getElementById("progressContainer").style.display = "none";
+
+  const resultContainer = document.getElementById("resultContainer");
+  const resultTitle = document.getElementById("resultTitle");
+  const resultMessage = document.getElementById("resultMessage");
+  const col1 = document.getElementById("col1");
+  const col2 = document.getElementById("col2");
+
+  resultContainer.style.display = "flex";
+  resultTitle.style.display = "block";
+  col1.innerHTML = "";
+  col2.innerHTML = "";
+
+  let correctCount = 0;
+
+  wordList.forEach((word, index) => {
+    const status = wordStatus[word] || {};
+    const isCorrect = status.correct;
+    const isSkipped = status.skipped;
+    const icon = isCorrect ? "✓" : isSkipped ? "✗" : "";
+    if (isCorrect) correctCount++;
+
+    const div = document.createElement("div");
+    div.className = "result-item";
+    div.innerHTML = `${word} <span class="result-icon">${icon}</span>`;
+    (index % 2 === 0 ? col1 : col2).appendChild(div);
+  });
+
+  const pct = correctCount / wordList.length;
+  let msg = "";
+  if (pct > 0.9) msg = "Excellent!";
+  else if (pct > 0.7) msg = "Great job!";
+  else if (pct > 0.6) msg = "Good!";
+  else msg = "Keep working!";
+  resultMessage.textContent = msg;
+
+  const tryBtn = document.createElement("button");
+  tryBtn.id = "startButton";
+  tryBtn.textContent = "Try Again";
+  tryBtn.onclick = startRecognition;
+  document.getElementById("topButtons").appendChild(tryBtn);
+}
+</script>
+</body>
+</html>
