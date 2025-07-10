@@ -163,9 +163,23 @@
       align-self: flex-end;
       margin-left: 300px;
     }
+
+    #listening {
+      display: none;
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 22px;
+      color: green;
+      font-weight: bold;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
+
+<audio id="clickSound" src="click.mp3" preload="auto"></audio>
 
 <div class="top-buttons" id="topButtons">
   <button id="startButton" onclick="startRecognition()">Start Speaking</button>
@@ -188,6 +202,8 @@
   </div>
 </div>
 
+<div id="listening">🎙️ Listening...</div>
+
 <script>
 const wordList = ["mesh", "chip", "moth", "shin", "with", "bee", "cash", "top", "read", "meet", "joy", "coil"];
 const wordVariants = {
@@ -207,7 +223,7 @@ const wordVariants = {
 
 let currentIndex = 0;
 let recognition;
-let wordStatus = {}; // key: word, value: { correct: bool, skipped: bool }
+let wordStatus = {};
 
 function renderProgress() {
   const container = document.getElementById("progressContainer");
@@ -238,19 +254,29 @@ function initRecognition() {
   recognition.maxAlternatives = 1;
   recognition.continuous = false;
 
+  recognition.onstart = () => {
+    document.getElementById("listening").style.display = "block";
+    console.log("🎤 Recognition started");
+  };
+
+  recognition.onend = () => {
+    document.getElementById("listening").style.display = "none";
+    console.log("🔇 Recognition ended");
+    if (currentIndex < wordList.length) {
+      setTimeout(() => recognition.start(), 500);
+    }
+  };
+
   recognition.onresult = function(event) {
     const spoken = event.results[0][0].transcript.trim().toLowerCase();
+    console.log("🗣️ You said:", spoken);
     const word = wordList[currentIndex];
     const variants = wordVariants[word] || [word];
-    const matched = variants.some(v => spoken.includes(v));
+    const matched = variants.some(v => spoken === v);
 
     if (matched) {
       showFeedback("✓", "red");
-
-      // 使用新 Audio 物件以完整播放聲音
-      const clickSound = new Audio("click_extended.mp3");
-      clickSound.play();
-
+      document.getElementById("clickSound").cloneNode(true).play();
       if (!wordStatus[word]) wordStatus[word] = {};
       wordStatus[word].correct = true;
 
@@ -275,9 +301,9 @@ function initRecognition() {
     }
   };
 
-  recognition.onerror = () => recognition.stop();
-  recognition.onend = () => {
-    if (currentIndex < wordList.length) recognition.start();
+  recognition.onerror = (event) => {
+    console.error("❌ Speech recognition error:", event.error);
+    recognition.stop();
   };
 }
 
@@ -289,7 +315,6 @@ function startRecognition() {
   document.getElementById("word").style.display = "block";
   document.getElementById("progressContainer").style.display = "flex";
   document.getElementById("resultContainer").style.display = "none";
-
   document.getElementById("startButton").remove();
 
   const skipBtn = document.createElement("button");
@@ -306,7 +331,6 @@ function skipWord() {
   const word = wordList[currentIndex];
   if (!wordStatus[word]) wordStatus[word] = {};
   wordStatus[word].skipped = true;
-
   currentIndex++;
   if (currentIndex < wordList.length) {
     updateWord();
